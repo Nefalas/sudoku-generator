@@ -2,7 +2,7 @@ package se.nefalas;
 
 import java.util.Arrays;
 
-public class Utils {
+class Utils {
     static boolean intArrayContains(int[] array, int value) {
         return Arrays.stream(array).anyMatch(i -> i == value);
     }

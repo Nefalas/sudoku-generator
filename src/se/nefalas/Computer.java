@@ -1,6 +1,6 @@
 package se.nefalas;
 
-public class Computer {
+class Computer {
 
     static boolean solve(Sudoku sudoku) {
         int row = 0, column = 0;

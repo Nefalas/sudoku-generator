@@ -2,15 +2,11 @@ package se.nefalas;
 
 import java.util.Arrays;
 
-public class Sudoku {
+class Sudoku {
     private int[] values;
 
     Sudoku(int[] numbers) {
         this.values = numbers;
-    }
-
-    int[] getValues() {
-        return values;
     }
 
     int getValue(int row, int column) {
@@ -35,14 +31,14 @@ public class Sudoku {
                 && Utils.intArrayDoesNotContain(blockArray, value);
     }
 
-    int[] getRow(int rowIndex) {
+    private int[] getRow(int rowIndex) {
         int startIndex = rowIndex * 9;
         int endIndex = startIndex + 9;
 
         return Arrays.copyOfRange(this.values, startIndex, endIndex);
     }
 
-    int[] getColumn(int columnIndex) {
+    private int[] getColumn(int columnIndex) {
         int[] array = new int[9];
         for (int i = 0; i < 9; i++) {
             array[i] = this.values[i * 9 + columnIndex];
@@ -51,7 +47,7 @@ public class Sudoku {
         return array;
     }
 
-    int[] getBlock(int row, int column) {
+    private int[] getBlock(int row, int column) {
         int startRowIndex = (row / 3) * 3;
         int startColumnIndex = (column / 3) * 3;
         int[] array = new int[9];
@@ -99,7 +95,7 @@ public class Sudoku {
         System.out.println();
     }
 
-    static int getIndexFromRowAndColumn(int row, int column) {
+    private static int getIndexFromRowAndColumn(int row, int column) {
         return 9 * row + column;
     }
 
