@@ -10,4 +10,9 @@ class Utils {
     static boolean intArrayDoesNotContain(int[] array, int value) {
         return Arrays.stream(array).noneMatch(i -> i == value);
     }
+
+    static void clearScreen(){
+        System.out.print("\033[H\033[2J");
+        System.out.flush();
+    }
 }
