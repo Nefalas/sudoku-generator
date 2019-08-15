@@ -7,25 +7,56 @@ import java.util.List;
 class Sudoku {
     private int[] values;
     private int[] possibleValues;
+    private boolean[] emptiedPossibleValues;
     private long lastPrint;
 
-    Sudoku(int[] numbers) {
-        this.values = numbers;
+    Sudoku(int[] values) {
+        this.values = values;
         this.possibleValues = new int[81];
-        Arrays.fill(this.possibleValues, ~0);
+        this.emptiedPossibleValues = new boolean[81];
         this.lastPrint = 0;
+
+        Arrays.fill(this.possibleValues, ~0);
+        Arrays.fill(this.emptiedPossibleValues, false);
+    }
+
+    private Sudoku(int[] values, int[] possibleValues, boolean[] emptiedPossibleValues, long lastPrint) {
+        this.values = values;
+        this.possibleValues = possibleValues;
+        this.emptiedPossibleValues = emptiedPossibleValues;
+        this.lastPrint = lastPrint;
     }
 
     int getValue(int row, int column) {
         return this.values[getIndexFromRowAndColumn(row, column)];
     }
 
+    void setValue(int index, int value) {
+        this.values[index] = value;
+    }
+
     void setValue(int row, int column, int value) {
         this.values[getIndexFromRowAndColumn(row, column)] = value;
     }
 
+    int getFirstEmptyIndex() {
+        for (int i = 0; i < 81; i++) {
+            if (this.values[i] == 0) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     int[] getPossibleValues(int row, int column) {
         int bits = this.possibleValues[getIndexFromRowAndColumn(row, column)];
+
+        return getPossibleValuesFromBits(bits);
+    }
+
+    int[] getPossibleValues(int index) {
+        int bits = this.possibleValues[index];
 
         return getPossibleValuesFromBits(bits);
     }
@@ -39,7 +70,7 @@ class Sudoku {
         this.possibleValues[index] = bits;
     }
 
-    void removePossibleValue(int row, int column, int value) {
+    private void removePossibleValue(int row, int column, int value) {
         int index = getIndexFromRowAndColumn(row, column);
 
         int bits = this.possibleValues[index];
@@ -48,14 +79,28 @@ class Sudoku {
         this.possibleValues[index] = bits;
     }
 
-    void removeAllPossibleValues(int row, int column) {
+    void emptyPossibleValues(int row, int column, int value) {
+        this.removeAllPossibleValues(row, column);
+        this.removePossibleValueFromNeighbours(row, column, value);
+        this.addEmptiedPossibleValue(getIndexFromRowAndColumn(row, column));
+    }
+
+    boolean isEmptyAtIndex(int index) {
+        return this.emptiedPossibleValues[index];
+    }
+
+    private void removeAllPossibleValues(int row, int column) {
         this.possibleValues[getIndexFromRowAndColumn(row, column)] = 0;
     }
 
-    void removePossibleValueFromNeighbours(int row, int column, int value) {
+    private void removePossibleValueFromNeighbours(int row, int column, int value) {
         this.removePossibleValueFromRow(row, value);
         this.removePossibleValueFromColumn(column, value);
         this.removePossibleValueFromBlock(row, column, value);
+    }
+
+    private void addEmptiedPossibleValue(int index) {
+        this.emptiedPossibleValues[index] = true;
     }
 
     private void removePossibleValueFromRow(int row, int value) {
@@ -134,8 +179,9 @@ class Sudoku {
     void print(boolean force) {
         long now = System.currentTimeMillis();
         long elapsed = now - this.lastPrint;
+        final int FPS = 2;
 
-        if (!force && this.lastPrint != -1 && elapsed < 1000 / 60) {
+        if (!force && this.lastPrint != -1 && elapsed < 1000 / FPS) {
             return;
         }
 
@@ -171,6 +217,23 @@ class Sudoku {
 
     void print() {
         this.print(false);
+    }
+
+    void printPossibleValues() {
+        for (int bits : this.possibleValues) {
+            int[] values = getPossibleValuesFromBits(bits);
+
+            System.out.println(Arrays.toString(values));
+        }
+    }
+
+    Sudoku copy() {
+        return new Sudoku(
+                this.values.clone(),
+                this.possibleValues.clone(),
+                this.emptiedPossibleValues.clone(),
+                this.lastPrint
+        );
     }
 
     private static int getIndexFromRowAndColumn(int row, int column) {
