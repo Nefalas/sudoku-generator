@@ -2,12 +2,21 @@ package se.nefalas;
 
 class Computer {
 
+    private static boolean isSolved;
+
     static void solve(Sudoku sudoku) {
         long start = System.currentTimeMillis();
 
         fillPossibleValues(sudoku);
 
         if (sudoku.isFull()) {
+            sudoku.print(true);
+
+            long elapsed = System.currentTimeMillis() - start;
+            double elapsedSeconds = (double) elapsed / 1000.0;
+            String message = String.format("Took %.4f seconds to solve", elapsedSeconds);
+            System.out.println(message);
+
             return;
         }
 
@@ -20,14 +29,9 @@ class Computer {
 
             String name = "Solver " + value + " at " + firstIndex;
 
-            RecursiveThreadSolver solver = new RecursiveThreadSolver(copy, name);
+            RecursiveThreadSolver solver = new RecursiveThreadSolver(copy, name, start);
             solver.start();
         }
-
-//        long elapsed = System.currentTimeMillis() - start;
-//        double elapsedSeconds = (double)elapsed / 1000.0;
-//        String message = String.format("Took %.4f seconds to solve", elapsedSeconds);
-//        System.out.println(message);
     }
 
     private static void fillPossibleValues(Sudoku sudoku) {
@@ -64,6 +68,7 @@ class Computer {
     }
 
     private static Sudoku solveRecursive(Sudoku sudoku) {
+        if (isSolved) return null;
         if (sudoku.isFull()) return sudoku;
 
         int row, column;
@@ -101,23 +106,29 @@ class Computer {
     static class RecursiveThreadSolver implements Runnable {
         private Thread thread;
         private String name;
+        private long start;
 
         private Sudoku sudoku;
 
-        RecursiveThreadSolver(Sudoku sudoku, String name) {
+        RecursiveThreadSolver(Sudoku sudoku, String name, long start) {
             this.sudoku = sudoku;
             this.name = name;
+            this.start = start;
         }
 
         @Override
         public void run() {
             Sudoku result = Computer.solveRecursive(this.sudoku);
 
-            if (result == null) {
-                System.out.println("Could not solve by " + name);
-            } else {
-                System.out.println("Solved by " + name);
+            if (result != null) {
+                isSolved = true;
+
                 result.print(true);
+
+                long elapsed = System.currentTimeMillis() - start;
+                double elapsedSeconds = (double) elapsed / 1000.0;
+                String message = String.format("Took %.4f seconds to solve by %s", elapsedSeconds, this.name);
+                System.out.println(message);
             }
         }
 
