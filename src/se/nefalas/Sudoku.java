@@ -140,7 +140,7 @@ class Sudoku {
                 || Utils.intArrayContains(blockArray, value);
     }
 
-    private int[] getRow(int rowIndex) {
+    int[] getRow(int rowIndex) {
         int startIndex = rowIndex * 9;
         int endIndex = startIndex + 9;
 

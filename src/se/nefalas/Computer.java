@@ -2,9 +2,15 @@ package se.nefalas;
 
 class Computer {
 
-    private static boolean isSolved;
+    private GUI gui;
 
-    static void solve(Sudoku sudoku) {
+    private boolean isSolved;
+
+    Computer(GUI gui) {
+        this.gui = gui;
+    }
+
+    void solve(Sudoku sudoku, Callback callback) {
         long start = System.currentTimeMillis();
 
         fillPossibleValues(sudoku);
@@ -29,12 +35,12 @@ class Computer {
 
             String name = "Solver " + value + " at " + firstIndex;
 
-            RecursiveThreadSolver solver = new RecursiveThreadSolver(copy, name, start);
+            RecursiveThreadSolver solver = new RecursiveThreadSolver(copy, name, start, value - 1, callback);
             solver.start();
         }
     }
 
-    private static void fillPossibleValues(Sudoku sudoku) {
+    private void fillPossibleValues(Sudoku sudoku) {
         int row, column;
         boolean didChange;
 
@@ -67,7 +73,7 @@ class Computer {
         } while (didChange);
     }
 
-    private static Sudoku solveRecursive(Sudoku sudoku) {
+    private Sudoku solveRecursive(Sudoku sudoku, int index) {
         if (isSolved) return null;
         if (sudoku.isFull()) return sudoku;
 
@@ -84,12 +90,15 @@ class Computer {
             for (int value : possibleValues) {
                 Sudoku copy = sudoku.copy();
                 copy.setValue(row, column, value);
+
+                this.gui.setSudoku(copy, index);
+
                 fillPossibleValues(copy);
 
                 if (copy.isFull()) {
                     return copy;
                 } else {
-                    Sudoku solved = solveRecursive(copy);
+                    Sudoku solved = solveRecursive(copy, index);
 
                     if (solved != null) {
                         return solved;
@@ -103,22 +112,27 @@ class Computer {
         return null;
     }
 
-    static class RecursiveThreadSolver implements Runnable {
+    class RecursiveThreadSolver implements Runnable {
         private Thread thread;
         private String name;
         private long start;
+        private int index;
+
+        private Callback callback;
 
         private Sudoku sudoku;
 
-        RecursiveThreadSolver(Sudoku sudoku, String name, long start) {
+        RecursiveThreadSolver(Sudoku sudoku, String name, long start, int index, Callback callback) {
             this.sudoku = sudoku;
             this.name = name;
             this.start = start;
+            this.index = index;
+            this.callback = callback;
         }
 
         @Override
         public void run() {
-            Sudoku result = Computer.solveRecursive(this.sudoku);
+            Sudoku result = solveRecursive(this.sudoku, this.index);
 
             if (result != null) {
                 isSolved = true;
@@ -129,6 +143,8 @@ class Computer {
                 double elapsedSeconds = (double) elapsed / 1000.0;
                 String message = String.format("Took %.4f seconds to solve by %s", elapsedSeconds, this.name);
                 System.out.println(message);
+
+                callback.run();
             }
         }
 
@@ -139,4 +155,8 @@ class Computer {
             }
         }
     }
+}
+
+interface Callback {
+    void run();
 }
