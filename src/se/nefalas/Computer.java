@@ -142,12 +142,13 @@ class Computer {
             }
         }
     }
-}
 
-interface OnUpdate {
-    void run(Sudoku sudoku, int sudokuIndex);
-}
+    interface OnUpdate {
+        void run(Sudoku sudoku, int sudokuIndex);
+    }
 
-interface OnSolve {
-    void run(Sudoku sudoku, int sudokuIndex, long start);
+    interface OnSolve {
+        void run(Sudoku sudoku, int sudokuIndex, long start);
+    }
+
 }

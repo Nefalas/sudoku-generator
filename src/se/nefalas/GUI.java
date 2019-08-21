@@ -10,8 +10,14 @@ import java.util.TimerTask;
 
 class GUI extends Canvas {
 
+    enum STEP {
+        READ,
+        SOLVE
+    }
+
     private Graphics2D g;
     private BufferStrategy strategy;
+    private JFrame container;
     private JPanel panel;
 
     private int windowWidth = 900;
@@ -19,6 +25,7 @@ class GUI extends Canvas {
 
     private final Color BACKGROUND_COLOR = Color.WHITE;
     private final Color TEXT_COLOR = Color.GRAY;
+    private final Color SOLVED_COLOR = new Color(10, 175, 10);
 
     private Font numberFont = new Font("Lucida Blackletter", Font.PLAIN, 30);
 
@@ -26,14 +33,21 @@ class GUI extends Canvas {
 
     private Sudoku[] sudokus;
 
+    private STEP step;
+
     GUI() {
         this.sudokus = new Sudoku[9];
+        this.step = STEP.READ;
 
         this.setupJFrame();
     }
 
+    void setStep(STEP step) {
+        this.step = step;
+    }
+
     private void setupJFrame() {
-        JFrame container = new JFrame("Sudoku Solver");
+        container = new JFrame("Sudoku Solver");
         container.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         panel = (JPanel) container.getContentPane();
@@ -46,6 +60,7 @@ class GUI extends Canvas {
         setIgnoreRepaint(true);
 
         container.setResizable(true);
+        container.setAlwaysOnTop(true);
         container.pack();
         container.setVisible(true);
 
@@ -66,6 +81,7 @@ class GUI extends Canvas {
 
     void stop() {
         this.isRunning = false;
+        this.container.setAlwaysOnTop(false);
         System.out.println("GUI stopped");
     }
 
@@ -113,7 +129,14 @@ class GUI extends Canvas {
     }
 
     private void draw() {
-        this.drawAllGrids();
+        switch (this.step) {
+            case READ:
+                this.drawReadingGrid();
+                break;
+            case SOLVE:
+                this.drawSolvingGrids();
+                break;
+        }
     }
 
     private void display() {
@@ -121,7 +144,23 @@ class GUI extends Canvas {
         strategy.show();
     }
 
-    private void drawAllGrids() {
+    private void drawReadingGrid() {
+        final double margin = 80.0;
+        final double totalWidth = windowWidth - 2.0 * margin;
+        final double totalHeight = windowHeight - 2.0 * margin;
+
+        final double size = Math.min(totalWidth, totalHeight);
+
+        final int left = (int) Math.round(margin + (totalWidth - size) / 2.0);
+        final int top = (int) Math.round(margin + (totalHeight - size) / 2.0);
+
+        final int fontSize = (int) Math.round(size * 0.08);
+        this.numberFont = new Font("Lucida Blackletter", Font.PLAIN, fontSize);
+
+        this.drawGrid(left, top, (int) Math.round(size), sudokus[0], Color.black);
+    }
+
+    private void drawSolvingGrids() {
         final double margin = 50.0;
         final double spacerRatio = .02;
         final double totalWidth = windowWidth - 2.0 * margin;
@@ -139,7 +178,7 @@ class GUI extends Canvas {
 
         final int fontSize = (int) Math.round(gridSize * 0.08);
 
-        numberFont = new Font("Lucida Blackletter", Font.PLAIN, fontSize);
+        this.numberFont = new Font("Lucida Blackletter", Font.PLAIN, fontSize);
 
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 3; col++) {
@@ -148,12 +187,15 @@ class GUI extends Canvas {
 
                 int index = row * 3 + col;
 
-                this.drawGrid(x, y, (int) Math.round(gridSize), sudokus[index]);
+                Sudoku sudoku = sudokus[index];
+                Color gridColor = sudoku != null && sudoku.isFull() ? SOLVED_COLOR : Color.BLACK;
+
+                this.drawGrid(x, y, (int) Math.round(gridSize), sudoku, gridColor);
             }
         }
     }
 
-    private void drawGrid(int left, int top, int size, Sudoku sudoku) {
+    private void drawGrid(int left, int top, int size, Sudoku sudoku, Color gridColor) {
         BasicStroke thick = new BasicStroke(3);
         BasicStroke medium = new BasicStroke(2.5F);
         BasicStroke thin = new BasicStroke(1);
@@ -163,7 +205,7 @@ class GUI extends Canvas {
         int bottom = top + size;
 
         for (int i = 0; i < 10; i++) {
-            g.setColor(Color.BLACK);
+            g.setColor(gridColor);
 
             if (i == 0 || i == 9) {
                 g.setStroke(thick);

@@ -12,6 +12,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.util.*;
 import java.util.List;
@@ -28,34 +29,52 @@ class SudokuReader {
     private enum GRID_VALUES {ROWS, COLUMNS}
 
     private Tesseract tesseract;
+    private boolean debug;
 
-    SudokuReader() {
+    private OnUpdate onUpdate;
+
+    SudokuReader(OnUpdate onUpdate) {
+        this.onUpdate = onUpdate;
+
         this.tesseract = new Tesseract();
 
         String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource("tessdata")).getFile();
-        this.tesseract.setDatapath(path);
+        this.tesseract.setDatapath(new File(path).getAbsolutePath());
+        this.tesseract.setTessVariable("debug_file", "/dev/null");
+        this.tesseract.setTessVariable("load_system_dawg", "F");
+        this.tesseract.setTessVariable("load_freq_dawg", "F");
         this.tesseract.setTessVariable("tessedit_char_whitelist", "123456789");
+        this.tesseract.setPageSegMode(10);
+
+        this.debug = false;
     }
 
     Sudoku readSudoku(String imgPath) {
+        long start = System.currentTimeMillis();
+
         Mat image = Imgcodecs.imread(imgPath);
-        Mat preparedImage = prepareImage(image);
+        Mat gridDetectionImage = prepareImageForGridDetection(image);
+        Mat OCRImage = prepareImageForOCR(image);
 
-        showMat(image, 2, "Original");
-        showMat(preparedImage, 2, "Transformed");
-
-        List<Rect> bBoxes = getBBoxes(image, preparedImage);
-        List<Point> corners = getCornersFromRects(bBoxes);
-
-        Mat cornersOnly = new Mat(image.size(), CvType.CV_8UC3, new Scalar(0, 0, 0));
-        Mat gridOnly = cornersOnly.clone();
-        Mat gridOnImage = image.clone();
-
-        for (Point corner : corners) {
-            Imgproc.circle(cornersOnly, corner, 1, new Scalar(0, 255, 0), 1);
+        if (this.debug) {
+            showMat(image, "Original", 2, 5, 0);
+            showMat(gridDetectionImage, "Grid detection", 2, 5, 1);
+            showMat(OCRImage,"OCR", 2, 5, 2);
         }
 
-        showMat(cornersOnly, 2, "Corners");
+        PrunedBBoxes bboxes = this.getBBoxes(image, gridDetectionImage);
+
+        List<Point> corners = getCornersFromRects(bboxes.getPruned());
+
+        if (this.debug) {
+            Mat cornersOnly = new Mat(image.size(), CvType.CV_8UC3, new Scalar(0, 0, 0));
+
+            for (Point corner : corners) {
+                Imgproc.circle(cornersOnly, corner, 1, new Scalar(0, 255, 0), 1);
+            }
+
+            showMat(cornersOnly, "Corners", 2, 5, 7);
+        }
 
         List<Double> rows = extractGridValues(corners, GRID_VALUES.ROWS);
         List<Double> cols = extractGridValues(corners, GRID_VALUES.COLUMNS);
@@ -66,43 +85,63 @@ class SudokuReader {
             return null;
         }
 
-        drawGrid(gridOnly, rows, cols);
-        drawGrid(gridOnImage, rows, cols);
+        if (this.debug) {
+            Mat gridOnly = new Mat(image.size(), CvType.CV_8UC3, new Scalar(0, 0, 0));
+            Mat gridOnImage = image.clone();
 
-        showMat(gridOnly, 2, "Grid");
-        showMat(gridOnImage, 2, "Grid on image");
+            drawGrid(gridOnly, rows, cols);
+            drawGrid(gridOnImage, rows, cols);
 
-        Rectangle[] rois = getROIs(rows, cols);
-        BufferedImage ocrImage = matToImage(preparedImage);
-
-        try {
-            int[] values = readROIs(ocrImage, rois);
-
-            return new Sudoku(values);
-        } catch (TesseractException e) {
-            e.printStackTrace();
-
-            return null;
+            showMat(gridOnly,"Grid", 2, 5, 8);
+            showMat(gridOnImage,"Grid on image", 2, 5, 9);
         }
+
+        Rectangle[] boxes = getBoxes(rows, cols);
+
+        boolean[] usedBoxes = this.getUsedBoxes(boxes, bboxes.getRemaining());
+
+        BufferedImage ocrImage = matToImage(OCRImage);
+
+        int[] values = readBoxes(ocrImage, boxes, usedBoxes);
+
+        long elapsed = System.currentTimeMillis() - start;
+        double elapsedSeconds = (double) elapsed / 1000.0;
+        String message = String.format("Took %.4f seconds to read", elapsedSeconds);
+        System.out.println(message);
+
+        return new Sudoku(values);
     }
 
-    private static Mat prepareImage(Mat image) {
+    void setDebug(boolean active) {
+        this.debug = active;
+    }
+
+    private static Mat prepareImageForGridDetection(Mat image) {
         Mat result = new Mat();
 
         Imgproc.cvtColor(image, result, Imgproc.COLOR_BGR2GRAY);
-        Imgproc.threshold(result, result, 180, 255, Imgproc.THRESH_TOZERO);
+        Imgproc.threshold(result, result, 225, 255, Imgproc.THRESH_BINARY);
 
         return result;
     }
 
-    private static List<Rect> getBBoxes(Mat original, Mat image) {
+    private static Mat prepareImageForOCR(Mat image) {
+        Mat result = new Mat();
+
+        Imgproc.cvtColor(image, result, Imgproc.COLOR_BGR2GRAY);
+        Imgproc.threshold(result, result, 180, 255, Imgproc.THRESH_BINARY);
+
+        return result;
+    }
+
+    private PrunedBBoxes getBBoxes(Mat original, Mat image) {
         List<MatOfPoint> contours = new ArrayList<>();
         Imgproc.findContours(image, contours, new Mat(), Imgproc.RETR_CCOMP, Imgproc.CHAIN_APPROX_SIMPLE);
 
         Mat contourImage = original.clone();
         Mat contoursOnly = new Mat(original.size(), CvType.CV_8UC3, new Scalar(0, 0, 0));
         Mat bboxesOnly = contoursOnly.clone();
-        Mat prunedBBoxes = contoursOnly.clone();
+        Mat prunedBBoxesOnly = contoursOnly.clone();
 
         int index = 0;
         List<Rect> bboxes = new ArrayList<>();
@@ -110,39 +149,72 @@ class SudokuReader {
             Rect bbox = Imgproc.boundingRect(mat);
             bboxes.add(bbox);
 
-            Imgproc.drawContours(contourImage, contours, index, new Scalar(0, 255, 0), 1);
-            Imgproc.drawContours(contoursOnly, contours, index++, new Scalar(0, 255, 0), 1);
-            Imgproc.rectangle(bboxesOnly, bbox, new Scalar(0, 255, 0));
+            if (this.debug) {
+                Imgproc.drawContours(contourImage, contours, index, new Scalar(0, 255, 0), 1);
+                Imgproc.drawContours(contoursOnly, contours, index++, new Scalar(0, 255, 0), 1);
+                Imgproc.rectangle(bboxesOnly, bbox, new Scalar(0, 255, 0));
+            }
+        }
+        PrunedBBoxes prunedBBoxes = this.pruneBBoxes(bboxes);
+
+        for (Rect bbox : prunedBBoxes.getPruned()) {
+            Imgproc.rectangle(prunedBBoxesOnly, bbox, new Scalar(0, 255, 0));
         }
 
-        if (bboxes.size() > 0) {
-            bboxes = pruneContours(bboxes);
+        if (this.debug) {
+            showMat(contourImage,"Contours on image", 2, 5, 3);
+            showMat(contoursOnly,"Contours", 2, 5, 4);
+            showMat(bboxesOnly, "Bounding boxes", 2, 5, 5);
+            showMat(prunedBBoxesOnly,"Pruned bounding boxes", 2, 5, 6);
         }
 
-        for (Rect contour : bboxes) {
-            Imgproc.rectangle(prunedBBoxes, contour, new Scalar(0, 255, 0));
-        }
-
-        showMat(contourImage, 2, "Contours on image");
-        showMat(contoursOnly, 2, "Contours");
-        showMat(bboxesOnly, 2, "Bounding boxes");
-        showMat(prunedBBoxes, 2, "Pruned bounding boxes");
-
-        return bboxes;
+        return prunedBBoxes;
     }
 
-    private static List<Rect> pruneContours(List<Rect> contours) {
-        int size = getMostCommonSize(contours);
+    private PrunedBBoxes pruneBBoxes(List<Rect> bboxes) {
+        int size = getMostCommonSize(bboxes);
         int threshold = (int) Math.round(size * 0.8);
+        int maxSize = size * 4;
 
         List<Rect> pruned = new ArrayList<>();
-        for (Rect contour : contours) {
-            if (contour.width >= threshold || contour.height >= threshold) {
-                pruned.add(contour);
+        List<Rect> remaining = new ArrayList<>();
+        for (Rect bbox : bboxes) {
+            if (bbox.width < maxSize && bbox.height < maxSize) {
+                if (bbox.width >= threshold || bbox.height >= threshold) {
+                    pruned.add(bbox);
+                } else {
+                    remaining.add(bbox);
+                }
             }
         }
 
-        return pruned;
+        return new PrunedBBoxes(pruned, remaining);
+    }
+
+    private boolean[] getUsedBoxes(Rectangle[] boxes, List<Rect> remainingBBoxes) {
+        boolean[] usedBoxes = new boolean[boxes.length];
+        Arrays.fill(usedBoxes, false);
+
+        for (Rect bbox : remainingBBoxes) {
+            for (int i = 0; i < boxes.length; i++) {
+                if (isRectInRectangle(bbox, boxes[i])) {
+                    usedBoxes[i] = true;
+                    break;
+                }
+            }
+        }
+
+        return usedBoxes;
+    }
+
+    private boolean isRectInRectangle(Rect bbox, Rectangle rectangle) {
+        int centerX = bbox.x + bbox.width / 2;
+        int centerY = bbox.y + bbox.height / 2;
+
+        return centerX >= rectangle.x
+                && centerX <= (rectangle.x + rectangle.width)
+                && centerY >= rectangle.y
+                && centerY <= (rectangle.y + rectangle.height);
     }
 
     private static int getMostCommonSize(List<Rect> contours) {
@@ -270,8 +342,9 @@ class SudokuReader {
         return new Point(x, y);
     }
 
-    private static Rectangle[] getROIs(List<Double> rows, List<Double> cols) {
+    private static Rectangle[] getBoxes(List<Double> rows, List<Double> cols) {
         Rectangle[] boxes = new Rectangle[81];
+        final double margin = 0.1;
 
         int index = 0;
         for (int row = 0; row < 9; row++) {
@@ -281,36 +354,45 @@ class SudokuReader {
                 int width = (int) Math.round(cols.get(col + 1) - x);
                 int height = (int) Math.round(rows.get(row + 1) - y);
 
-                boxes[index++] = new Rectangle(x, y, width, height);
+                boxes[index++] = new Rectangle(
+                        (int) Math.round(x + margin * width),
+                        (int) Math.round(y + margin * height),
+                        (int) Math.round(width - 2 * margin * width),
+                        (int) Math.round(height - 2 * margin * height)
+                );
             }
         }
 
         return boxes;
     }
 
-    private int readROI(BufferedImage image, Rectangle rectangle) throws TesseractException {
+    private int readROI(BufferedImage image, Rectangle rectangle) {
         try {
-            String result = this.tesseract.doOCR(image, rectangle).trim();
-            System.out.print(result + " --- ");
-
-            result = result.replaceAll("[^0-9]", "");
-            System.out.println(result);
+            String result = this.tesseract.doOCR(image, rectangle).trim().replaceAll("[^0-9]", "");
 
             if (result.equals("")) {
                 return 0;
             }
 
             return Integer.parseInt(result);
-        } catch (NumberFormatException e) {
+        } catch (TesseractException | NumberFormatException e) {
             return 0;
         }
     }
 
-    private int[] readROIs(BufferedImage image, Rectangle[] rois) throws TesseractException {
-        int[] values = new int[rois.length];
+    private int[] readBoxes(BufferedImage image, Rectangle[] boxes, boolean[] usedBoxes) {
+        int[] values = new int[boxes.length];
 
-        for (int i = 0; i < rois.length; i++) {
-            values[i] = readROI(image, rois[i]);
+        for (int i = 0; i < boxes.length; i++) {
+            boolean isUsed = usedBoxes[i];
+
+            if (isUsed) {
+                values[i] = readROI(image, boxes[i]);
+            } else {
+                values[i] = 0;
+            }
+
+            this.onUpdate.run(values);
         }
 
         return values;
@@ -341,7 +423,7 @@ class SudokuReader {
     }
 
     private static BufferedImage matToImage(Mat mat) {
-        byte[] data = new byte[mat.width() * mat.height() * (int)mat.elemSize()];
+        byte[] data = new byte[mat.width() * mat.height() * (int) mat.elemSize()];
 
         mat.get(0, 0, data);
         int type = mat.channels() == 1 ? BufferedImage.TYPE_BYTE_GRAY : BufferedImage.TYPE_3BYTE_BGR;
@@ -352,7 +434,20 @@ class SudokuReader {
         return out;
     }
 
-    private static void showMat(Mat img, double ratio, String name) {
+    private static void showMat(Mat img, String name, int rows, int cols, int index) {
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        double maxWidth = screenSize.getWidth() / (double) cols;
+        double maxHeight = screenSize.getHeight() / (double) rows;
+
+        double size = Math.min(maxWidth, maxHeight) - 15; // account for borders
+        double ratio = size / Math.max(img.width(), img.height());
+
+        int row = index / cols;
+        int col = index % cols;
+
+        int x = (int) Math.round(col * maxWidth);
+        int y = (int) Math.round(row * (img.height() * ratio + 40)); // account for top bar
+
         Mat resized = new Mat();
         Imgproc.resize(img, resized, new Size(img.width() * ratio, img.height() * ratio));
         MatOfByte matOfByte = new MatOfByte();
@@ -366,6 +461,7 @@ class SudokuReader {
             bufImage = ImageIO.read(in);
             JFrame frame = new JFrame();
 
+            frame.setLocation(x, y);
             frame.setTitle(name);
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // DISPOSE_ON_CLOSE
             frame.setResizable(false);
@@ -375,5 +471,27 @@ class SudokuReader {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private class PrunedBBoxes {
+        private final List<Rect> pruned;
+        private final List<Rect> remaining;
+
+        PrunedBBoxes(List<Rect> pruned, List<Rect> remaining) {
+            this.pruned = pruned;
+            this.remaining = remaining;
+        }
+
+        List<Rect> getPruned() {
+            return pruned;
+        }
+
+        List<Rect> getRemaining() {
+            return remaining;
+        }
+    }
+
+    interface OnUpdate {
+        void run(int[] values);
     }
 }
