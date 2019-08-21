@@ -84,9 +84,9 @@ class GUI extends Canvas {
                 long start = System.currentTimeMillis();
                 final int FPS = 60;
 
-                GUI.this.setup();
-                GUI.this.draw();
-                GUI.this.display();
+                setup();
+                draw();
+                display();
 
                 long elapsed = System.currentTimeMillis() - start;
                 int remaining = (int) ((1000 / FPS) - elapsed);
