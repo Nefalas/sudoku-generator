@@ -2,26 +2,23 @@ package se.nefalas;
 
 class Computer {
 
-    private GUI gui;
+    private OnUpdate onUpdate;
+    private OnSolve onSolve;
 
     private boolean isSolved;
 
-    Computer(GUI gui) {
-        this.gui = gui;
+    Computer(OnUpdate onUpdate, OnSolve onSolve) {
+        this.onUpdate = onUpdate;
+        this.onSolve = onSolve;
     }
 
-    void solve(Sudoku sudoku, Callback callback) {
+    void solve(Sudoku sudoku) {
         long start = System.currentTimeMillis();
 
         fillPossibleValues(sudoku);
 
         if (sudoku.isFull()) {
-            sudoku.print(true);
-
-            long elapsed = System.currentTimeMillis() - start;
-            double elapsedSeconds = (double) elapsed / 1000.0;
-            String message = String.format("Took %.4f seconds to solve", elapsedSeconds);
-            System.out.println(message);
+            this.onSolve.run(sudoku, 4, start);
 
             return;
         }
@@ -35,7 +32,7 @@ class Computer {
 
             String name = "Solver " + value + " at " + firstIndex;
 
-            RecursiveThreadSolver solver = new RecursiveThreadSolver(copy, name, start, value - 1, callback);
+            RecursiveThreadSolver solver = new RecursiveThreadSolver(copy, name, start, value - 1);
             solver.start();
         }
     }
@@ -91,7 +88,7 @@ class Computer {
                 Sudoku copy = sudoku.copy();
                 copy.setValue(row, column, value);
 
-                this.gui.setSudoku(copy, index);
+                this.onUpdate.run(copy, index);
 
                 fillPossibleValues(copy);
 
@@ -118,16 +115,13 @@ class Computer {
         private long start;
         private int index;
 
-        private Callback callback;
-
         private Sudoku sudoku;
 
-        RecursiveThreadSolver(Sudoku sudoku, String name, long start, int index, Callback callback) {
+        RecursiveThreadSolver(Sudoku sudoku, String name, long start, int index) {
             this.sudoku = sudoku;
             this.name = name;
             this.start = start;
             this.index = index;
-            this.callback = callback;
         }
 
         @Override
@@ -137,14 +131,7 @@ class Computer {
             if (result != null) {
                 isSolved = true;
 
-                result.print(true);
-
-                long elapsed = System.currentTimeMillis() - start;
-                double elapsedSeconds = (double) elapsed / 1000.0;
-                String message = String.format("Took %.4f seconds to solve by %s", elapsedSeconds, this.name);
-                System.out.println(message);
-
-                callback.run();
+                Computer.this.onSolve.run(result, this.index, start);
             }
         }
 
@@ -157,6 +144,10 @@ class Computer {
     }
 }
 
-interface Callback {
-    void run();
+interface OnUpdate {
+    void run(Sudoku sudoku, int sudokuIndex);
+}
+
+interface OnSolve {
+    void run(Sudoku sudoku, int sudokuIndex, long start);
 }

@@ -14,13 +14,13 @@ class GUI extends Canvas {
     private BufferStrategy strategy;
     private JPanel panel;
 
-    private int windowWidth = 1280;
-    private int windowHeight = 720;
+    private int windowWidth = 900;
+    private int windowHeight = 900;
 
     private final Color BACKGROUND_COLOR = Color.WHITE;
     private final Color TEXT_COLOR = Color.GRAY;
 
-    private Font NUMBER_FONT = new Font("Lucida Blackletter", Font.PLAIN, 30);
+    private Font numberFont = new Font("Lucida Blackletter", Font.PLAIN, 30);
 
     private boolean isRunning = false;
 
@@ -46,8 +46,8 @@ class GUI extends Canvas {
         setIgnoreRepaint(true);
 
         container.setResizable(true);
-        container.setVisible(true);
         container.pack();
+        container.setVisible(true);
 
         requestFocus();
 
@@ -73,40 +73,37 @@ class GUI extends Canvas {
         this.run(false);
     }
 
-    private void run(boolean force) {
+    void run(boolean force) {
         if (!this.isRunning && !force) {
             return;
         }
 
-        EventQueue.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                long start = System.currentTimeMillis();
-                final int FPS = 60;
+        EventQueue.invokeLater(() -> {
+            long start = System.currentTimeMillis();
+            final int FPS = 60;
 
-                setup();
-                draw();
-                display();
+            setup();
+            draw();
+            display();
 
-                long elapsed = System.currentTimeMillis() - start;
-                int remaining = (int) ((1000 / FPS) - elapsed);
+            long elapsed = System.currentTimeMillis() - start;
+            int remaining = (int) ((1000 / FPS) - elapsed);
 
-                if (remaining < 0) {
-                    remaining = 0;
-                }
-
-                new Timer().schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        GUI.this.run();
-                    }
-                }, remaining);
+            if (remaining < 0) {
+                remaining = 0;
             }
+
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    GUI.this.run();
+                }
+            }, remaining);
         });
     }
 
     void setSudoku(Sudoku sudoku, int index) {
-        this.sudokus[index] = sudoku;
+        EventQueue.invokeLater(() -> sudokus[index] = sudoku);
     }
 
     private void setup() {
@@ -142,7 +139,7 @@ class GUI extends Canvas {
 
         final int fontSize = (int) Math.round(gridSize * 0.08);
 
-        NUMBER_FONT = new Font("Lucida Blackletter", Font.PLAIN, fontSize);
+        numberFont = new Font("Lucida Blackletter", Font.PLAIN, fontSize);
 
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 3; col++) {
@@ -187,7 +184,7 @@ class GUI extends Canvas {
                 int y = top + (int) Math.round(i * unit);
 
                 g.setColor(TEXT_COLOR);
-                g.setFont(NUMBER_FONT);
+                g.setFont(numberFont);
                 for (int col = 0; col < 9; col++) {
                     int number = numbers[col];
 
@@ -205,7 +202,7 @@ class GUI extends Canvas {
     }
 
     private void drawCenteredString(int rectX, int rectY, int rectW, int rectH, String text) {
-        FontMetrics metrics = g.getFontMetrics(NUMBER_FONT);
+        FontMetrics metrics = g.getFontMetrics(numberFont);
         int x = rectX + (rectW - metrics.stringWidth(text)) / 2;
         int y = rectY + ((rectH - metrics.getHeight()) / 2) + metrics.getAscent();
 

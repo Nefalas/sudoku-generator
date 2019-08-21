@@ -4,6 +4,8 @@ import java.util.Objects;
 
 public class Main {
 
+    private static GUI gui;
+
     public static void main(String[] args) {
 //        int[] values = {
 //                0,0,0, 0,9,0, 6,0,8,
@@ -35,23 +37,29 @@ public class Main {
 
         Sudoku sudoku = new Sudoku(values);
 
-        GUI gui = new GUI();
+        gui = new GUI();
         gui.init();
         gui.start();
 
-        Computer computer = new Computer(gui);
-
-        class OnDone implements Callback {
-            @Override
-            public void run() {
-                gui.stop();
-            }
-        }
-
-        computer.solve(sudoku, new OnDone());
+        Computer computer = new Computer(gui::setSudoku, Main::onSolve);
+        computer.solve(sudoku);
 
         String imgPath = Objects.requireNonNull(Main.class.getClassLoader().getResource("sudoku.jpg")).getFile();
+        SudokuReader sudokuReader = new SudokuReader();
 
-        SudokuReader.readSudoku(imgPath);
+        Sudoku imageSudoku = sudokuReader.readSudoku(imgPath);
+        imageSudoku.print(true);
+    }
+
+    private static void onSolve(Sudoku sudoku, int sudokuIndex, long start) {
+        long elapsed = System.currentTimeMillis() - start;
+        double elapsedSeconds = (double) elapsed / 1000.0;
+        String message = String.format("Took %.4f seconds to solve", elapsedSeconds);
+        System.out.println(message);
+
+        gui.stop();
+
+        gui.setSudoku(sudoku, sudokuIndex);
+        gui.run(true);
     }
 }
