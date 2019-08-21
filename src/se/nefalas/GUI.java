@@ -78,26 +78,31 @@ class GUI extends Canvas {
             return;
         }
 
-        long start = System.currentTimeMillis();
-        final int FPS = 60;
-
-        this.setup();
-        this.draw();
-        this.display();
-
-        long elapsed = System.currentTimeMillis() - start;
-        int remaining = (int) ((1000 / FPS) - elapsed);
-
-        if (remaining < 0) {
-            remaining = 0;
-        }
-
-        new Timer().schedule(new TimerTask() {
+        EventQueue.invokeLater(new Runnable() {
             @Override
             public void run() {
-                GUI.this.run();
+                long start = System.currentTimeMillis();
+                final int FPS = 60;
+
+                GUI.this.setup();
+                GUI.this.draw();
+                GUI.this.display();
+
+                long elapsed = System.currentTimeMillis() - start;
+                int remaining = (int) ((1000 / FPS) - elapsed);
+
+                if (remaining < 0) {
+                    remaining = 0;
+                }
+
+                new Timer().schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        GUI.this.run();
+                    }
+                }, remaining);
             }
-        }, remaining);
+        });
     }
 
     void setSudoku(Sudoku sudoku, int index) {

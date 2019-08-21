@@ -51,8 +51,7 @@ public class Main {
         computer.solve(sudoku, new OnDone());
 
         String imgPath = Objects.requireNonNull(Main.class.getClassLoader().getResource("sudoku.jpg")).getFile();
-        System.out.println(imgPath);
 
-        SudokuReader.readSudoku("D:/Projects/SudokuSolver/out/production/SudokuSolver/sudoku.jpg");
+        SudokuReader.readSudoku(imgPath);
     }
 }
