@@ -11,9 +11,7 @@ import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.InputStream;
+import java.io.*;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,7 +21,7 @@ import static java.util.stream.Collectors.toMap;
 class SudokuReader {
 
     static {
-        System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+        loadLib();
     }
 
     private enum GRID_VALUES {ROWS, COLUMNS}
@@ -33,13 +31,16 @@ class SudokuReader {
 
     private OnUpdate onUpdate;
 
+    private Mat original;
+
     SudokuReader(OnUpdate onUpdate) {
+        String dataPath = createConfig();
+
         this.onUpdate = onUpdate;
 
         this.tesseract = new Tesseract();
 
-        String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource("tessdata")).getFile();
-        this.tesseract.setDatapath(new File(path).getAbsolutePath());
+        this.tesseract.setDatapath(dataPath);
         this.tesseract.setTessVariable("debug_file", "/dev/null");
         this.tesseract.setTessVariable("load_system_dawg", "F");
         this.tesseract.setTessVariable("load_freq_dawg", "F");
@@ -49,10 +50,29 @@ class SudokuReader {
         this.debug = false;
     }
 
+    Sudoku readSudoku(BufferedImage bufferedImage) {
+        try {
+            Mat image = imageToMat(bufferedImage);
+
+            return this.readSudoku(image);
+        } catch (IOException e) {
+            e.printStackTrace();
+
+            return null;
+        }
+    }
+
     Sudoku readSudoku(String imgPath) {
+        Mat image = Imgcodecs.imread(imgPath);
+
+        return this.readSudoku(image);
+    }
+
+    Sudoku readSudoku(Mat image) {
+        this.original = image;
+
         long start = System.currentTimeMillis();
 
-        Mat image = Imgcodecs.imread(imgPath);
         Mat gridDetectionImage = prepareImageForGridDetection(image);
         Mat OCRImage = prepareImageForOCR(image);
 
@@ -76,11 +96,13 @@ class SudokuReader {
             showMat(cornersOnly, "Corners", 2, 5, 7);
         }
 
-        List<Double> rows = extractGridValues(corners, GRID_VALUES.ROWS);
-        List<Double> cols = extractGridValues(corners, GRID_VALUES.COLUMNS);
+        List<Double> rows = this.extractGridValues(corners, GRID_VALUES.ROWS);
+        List<Double> cols = this.extractGridValues(corners, GRID_VALUES.COLUMNS);
 
         if (rows.size() != 10 && cols.size() != 10) {
             System.out.println("Could not read sudoku");
+            System.out.println(rows.size());
+            System.out.println(cols.size());
 
             return null;
         }
@@ -129,7 +151,7 @@ class SudokuReader {
         Mat result = new Mat();
 
         Imgproc.cvtColor(image, result, Imgproc.COLOR_BGR2GRAY);
-        Imgproc.threshold(result, result, 180, 255, Imgproc.THRESH_BINARY);
+        Imgproc.threshold(result, result, 200, 255, Imgproc.THRESH_BINARY);
 
         return result;
     }
@@ -239,13 +261,13 @@ class SudokuReader {
         return sorted.entrySet().iterator().next().getKey();
     }
 
-    private static List<Point> getCornersFromRects(List<Rect> rects) {
+    private List<Point> getCornersFromRects(List<Rect> rects) {
         List<Point> corners = new ArrayList<>();
         for (Rect rect : rects) {
             corners.addAll(getCornersFromRect(rect));
         }
 
-        return groupClosePoints(corners);
+        return this.groupClosePoints(corners);
     }
 
     private static List<Point> getCornersFromRect(Rect rect) {
@@ -258,8 +280,8 @@ class SudokuReader {
         return corners;
     }
 
-    private static List<Point> groupClosePoints(List<Point> points) {
-        final int threshold = 5;
+    private List<Point> groupClosePoints(List<Point> points) {
+        final int threshold = (int) Math.round(0.02 * Math.min(this.original.width(), this.original.height()));
 
         List<Point> grouped = new ArrayList<>();
         for (Point point : points) {
@@ -289,8 +311,8 @@ class SudokuReader {
         return grouped;
     }
 
-    private static List<Double> groupValues(List<Double> values) {
-        final int threshold = 5;
+    private List<Double> groupValues(List<Double> values) {
+        final int threshold = (int) Math.round(0.02 * Math.min(this.original.width(), this.original.height()));
 
         List<Double> grouped = new ArrayList<>();
         for (double value : values) {
@@ -320,7 +342,7 @@ class SudokuReader {
         return grouped;
     }
 
-    private static List<Double> extractGridValues(List<Point> points, GRID_VALUES gridValues) {
+    private List<Double> extractGridValues(List<Point> points, GRID_VALUES gridValues) {
         List<Double> values = points
                 .stream()
                 .map(point -> gridValues == GRID_VALUES.COLUMNS ? point.x : point.y)
@@ -328,7 +350,7 @@ class SudokuReader {
                 .sorted()
                 .collect(Collectors.toList());
 
-        return groupValues(values);
+        return this.groupValues(values);
     }
 
     private static double getDistanceBetweenPoints(Point firstPoint, Point secondPoint) {
@@ -342,26 +364,24 @@ class SudokuReader {
         return new Point(x, y);
     }
 
-    private static Rectangle[] getBoxes(List<Double> rows, List<Double> cols) {
+    private Rectangle[] getBoxes(List<Double> rows, List<Double> cols) {
         Rectangle[] boxes = new Rectangle[81];
-        final double margin = 0.1;
+        final double margin = 0.009 * Math.min(this.original.width(), this.original.height());
+        System.out.println(margin);
 
         int index = 0;
         for (int row = 0; row < 9; row++) {
             for (int col = 0; col < 9; col++) {
-                int x = (int) Math.round(cols.get(col));
-                int y = (int) Math.round(rows.get(row));
-                int width = (int) Math.round(cols.get(col + 1) - x);
-                int height = (int) Math.round(rows.get(row + 1) - y);
+                int x = (int) Math.round(cols.get(col) + margin);
+                int y = (int) Math.round(rows.get(row) + margin);
+                int width = (int) Math.round(cols.get(col + 1) - x - margin);
+                int height = (int) Math.round(rows.get(row + 1) - y - margin);
 
-                boxes[index++] = new Rectangle(
-                        (int) Math.round(x + margin * width),
-                        (int) Math.round(y + margin * height),
-                        (int) Math.round(width - 2 * margin * width),
-                        (int) Math.round(height - 2 * margin * height)
-                );
+                boxes[index++] = new Rectangle(x, y, width, height);
             }
         }
+
+        System.out.println(boxes[0].width);
 
         return boxes;
     }
@@ -434,8 +454,19 @@ class SudokuReader {
         return out;
     }
 
+    private static Mat imageToMat(BufferedImage image) throws IOException {
+        BufferedImage imagePNG = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+        imagePNG.createGraphics().drawImage(image, 0, 0, Color.WHITE, null);
+
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        ImageIO.write(imagePNG, "png", byteArrayOutputStream);
+        byteArrayOutputStream.flush();
+
+        return Imgcodecs.imdecode(new MatOfByte(byteArrayOutputStream.toByteArray()), Imgcodecs.IMREAD_UNCHANGED);
+    }
+
     private static void showMat(Mat img, String name, int rows, int cols, int index) {
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        DisplayMode screenSize = getFirstDisplay();
         double maxWidth = screenSize.getWidth() / (double) cols;
         double maxHeight = screenSize.getHeight() / (double) rows;
 
@@ -473,7 +504,62 @@ class SudokuReader {
         }
     }
 
-    private class PrunedBBoxes {
+    private static DisplayMode getFirstDisplay() {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        GraphicsDevice[] gs = ge.getScreenDevices();
+
+        return gs[1].getDisplayMode();
+    }
+
+    private static void loadLib() {
+        try {
+            System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+        } catch (UnsatisfiedLinkError e) {
+            String libName = System.mapLibraryName(Core.NATIVE_LIBRARY_NAME);
+            String folder = copyResource(libName, libName, "temp/opencv");
+
+            System.load(folder + "/" + libName);
+        }
+    }
+
+    private static String createConfig() {
+        return copyResource( "eng.traineddata", "tessdata/eng.traineddata", "temp/tessdata");
+    }
+
+    private static String copyResource(String name, String source, String destination) {
+        InputStream inputStream = SudokuReader.class.getClassLoader().getResourceAsStream(source);
+        OutputStream outputStream;
+
+        if (inputStream == null) {
+            throw new RuntimeException();
+        }
+
+        File folder = new File(destination);
+        folder.mkdirs();
+
+        File target;
+
+        try {
+            byte[] buffer = new byte[inputStream.available()];
+
+            target = new File(folder.getAbsolutePath() + "/" + name);
+            outputStream = new FileOutputStream(target);
+
+            int length;
+            while ((length = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, length);
+            }
+
+            inputStream.close();
+            outputStream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return folder.getAbsolutePath();
+    }
+
+    private static class PrunedBBoxes {
         private final List<Rect> pruned;
         private final List<Rect> remaining;
 
