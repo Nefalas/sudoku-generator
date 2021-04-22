@@ -20,6 +20,10 @@ class Sudoku {
         Arrays.fill(this.emptiedPossibleValues, false);
     }
 
+    Sudoku(String values) {
+        this(stringToIntArray(values));
+    }
+
     private Sudoku(int[] values, int[] possibleValues, boolean[] emptiedPossibleValues, long lastPrint) {
         this.values = values;
         this.possibleValues = possibleValues;
@@ -250,5 +254,16 @@ class Sudoku {
         }
 
         return values.stream().mapToInt(i -> i).toArray();
+    }
+
+    private static int[] stringToIntArray(String test) {
+        String[] arr = test.split("");
+        int[] values = new int[arr.length];
+
+        for (int i = 0; i < values.length; i++) {
+            values[i] = Integer.parseInt(arr[i]);
+        }
+
+        return values;
     }
 }

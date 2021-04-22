@@ -508,13 +508,15 @@ class SudokuReader {
         GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
         GraphicsDevice[] gs = ge.getScreenDevices();
 
-        return gs[1].getDisplayMode();
+        return gs[0].getDisplayMode();
     }
 
     private static void loadLib() {
         try {
             System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
         } catch (UnsatisfiedLinkError e) {
+            System.out.println(e.getMessage());
+
             String libName = System.mapLibraryName(Core.NATIVE_LIBRARY_NAME);
             String folder = copyResource(libName, libName, "temp/opencv");
 

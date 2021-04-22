@@ -67,6 +67,8 @@ public class Main {
                 : sudokuReader.readSudoku(new File(imgPath).getAbsolutePath());
         sudoku.print(true);
 
+        //Sudoku sudoku = new Sudoku("980700600750000090006000000070040300008900050000002700010007004005800970000400060");
+
         gui.setStep(GUI.STEP.SOLVE);
 
         Computer computer = new Computer(gui::setSudoku, Main::onSolve);
@@ -75,6 +77,10 @@ public class Main {
 
     private static CommandLine parseArgs(String[] args) {
         options = new Options();
+
+        Option sudokuString = new Option("s", "sudoku", true, "sudoku string");
+        sudokuString.setRequired(false);
+        options.addOption(sudokuString);
 
         Option imagePath = new Option("i", "image", true, "input image path");
         imagePath.setRequired(false);
